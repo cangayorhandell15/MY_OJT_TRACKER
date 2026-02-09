@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My OJT Tracker</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body { font-family: sans-serif; background: #f0f2f5; padding: 20px; }
+        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+        h2 { color: #1a73e8; }
+        input, select, button { width: 100%; padding: 10px; margin: 10px 0; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; }
+        button { background: #1a73e8; color: white; border: none; font-weight: bold; cursor: pointer; }
+        .progress-container { background: #e0e0e0; border-radius: 10px; height: 20px; width: 100%; margin: 10px 0; }
+        .progress-bar { background: #34a853; height: 100%; border-radius: 10px; width: 0%; transition: width 0.5s; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="card" id="setup-card">
+    <h2>OJT Setup 🚀</h2>
+    <input type="text" id="name" placeholder="Pangalan">
+    <input type="number" id="goal" placeholder="Target Hours (e.g. 500)">
+    <label>Allowed ba ang OT?</label>
+    <select id="ot-allowed">
+        <option value="no">Hindi</option>
+        <option value="yes">Oo</option>
+    </select>
+    <div id="ot-hours-div" class="hidden">
+        <input type="number" id="ot-limit" placeholder="Ilang oras ang OT limit?">
+    </div>
+    <button onclick="saveSetup()">Simulan na!</button>
+</div>
+
+<div class="card hidden" id="tracker-card">
+    <h2 id="greet">Kumusta!</h2>
+    <div class="progress-container">
+        <div class="progress-bar" id="bar"></div>
+    </div>
+    <p id="stats">Rendered: 0 / 500 hrs</p>
+    <hr>
+    <h3>Daily Log</h3>
+    <p>Shift: 9:00 AM - 6:00 PM (8 hrs)</p>
+    <div id="ot-prompt">
+        <label>Mag-o-OT ka ba ngayon?</label>
+        <select id="daily-ot">
+            <option value="0">Walang OT</option>
+        </select>
+    </div>
+    <button onclick="logHours()">Log Today's Progress</button>
+    <button style="background: #ea4335;" onclick="resetData()">Reset Data</button>
+</div>
+
+<script>
+    let data = JSON.parse(localStorage.getItem('ojtData'));
+
+    // Registration para sa Offline Mode
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js');
+    }
+
+    if (data) showTracker();
+
+    document.getElementById('ot-allowed').addEventListener('change', function() {
+        document.getElementById('ot-hours-div').classList.toggle('hidden', this.value === 'no');
+    });
+
+    function saveSetup() {
+        const setup = {
+            name: document.getElementById('name').value,
+            goal: parseFloat(document.getElementById('goal').value),
+            otLimit: parseFloat(document.getElementById('ot-limit').value || 0),
+            rendered: 0
+        };
+        localStorage.setItem('ojtData', JSON.stringify(setup));
+        data = setup;
+        showTracker();
+    }
+
+    function showTracker() {
+        document.getElementById('setup-card').classList.add('hidden');
+        document.getElementById('tracker-card').classList.remove('hidden');
+        document.getElementById('greet').innerText = `Kaya mo 'yan, ${data.name}! 👋`;
+        
+        const otDropdown = document.getElementById('daily-ot');
+        otDropdown.innerHTML = '<option value="0">Walang OT</option>';
+        if (data.otLimit > 0) {
+            let opt = document.createElement('option');
+            opt.value = data.otLimit;
+            opt.innerText = `Oo (+${data.otLimit} hr/s)`;
+            otDropdown.appendChild(opt);
+        }
+        updateUI();
+    }
+
+    function logHours() {
+        const otToday = parseFloat(document.getElementById('daily-ot').value);
+        const standardHours = 8; 
+        const totalToday = standardHours + otToday;
+        
+        data.rendered += totalToday;
+        localStorage.setItem('ojtData', JSON.stringify(data));
+        updateUI();
+        alert(`Nice! Nakapag-render ka ng ${totalToday} oras ngayong araw.`);
+    }
+
+    function updateUI() {
+        const percent = (data.rendered / data.goal) * 100;
+        document.getElementById('bar').style.width = Math.min(percent, 100) + '%';
+        document.getElementById('stats').innerText = `Rendered: ${data.rendered} / ${data.goal} hrs (${percent.toFixed(1)}%)`;
+    }
+
+    function resetData() {
+        if(confirm("Bura lahat?")) {
+            localStorage.clear();
+            location.reload();
+        }
+    }
+</script>
+
+</body>
+</html>
