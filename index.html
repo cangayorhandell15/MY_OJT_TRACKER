@@ -8,28 +8,53 @@
     <style>
         body { font-family: sans-serif; background: #f0f2f5; padding: 20px; }
         .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
-        h2 { color: #1a73e8; }
-        input, select, button { width: 100%; padding: 10px; margin: 10px 0; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; }
-        button { background: #1a73e8; color: white; border: none; font-weight: bold; cursor: pointer; }
+        h2 { color: #1a73e8; margin-top: 0; }
+        label { font-size: 0.9rem; font-weight: bold; color: #555; }
+        input, select, button { width: 100%; padding: 10px; margin: 8px 0 15px 0; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; }
+        button { background: #1a73e8; color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; }
         .progress-container { background: #e0e0e0; border-radius: 10px; height: 20px; width: 100%; margin: 10px 0; }
         .progress-bar { background: #34a853; height: 100%; border-radius: 10px; width: 0%; transition: width 0.5s; }
         .hidden { display: none; }
+        .info-text { font-size: 0.85rem; color: #666; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
 <div class="card" id="setup-card">
     <h2>OJT Setup 🚀</h2>
-    <input type="text" id="name" placeholder="Pangalan">
-    <input type="number" id="goal" placeholder="Target Hours (e.g. 500)">
+    
+    <label>Pangalan</label>
+    <input type="text" id="name" placeholder="Ex: Juan">
+
+    <label>Target Hours</label>
+    <input type="number" id="goal" placeholder="Ex: 500">
+
+    <label>Ilang oras na ang natapos mo? (Existing)</label>
+    <input type="number" id="initial-hours" value="189">
+
+    <label>Shift Schedule</label>
+    <div style="display: flex; gap: 10px;">
+        <input type="time" id="start-time" value="09:00">
+        <input type="time" id="end-time" value="18:00">
+    </div>
+
+    <label>Kasama ba ang Lunch sa Working Hours?</label>
+    <select id="include-lunch">
+        <option value="no">Hindi (Bawas 1 hour)</option>
+        <option value="yes">Oo (Paid lunch)</option>
+    </select>
+
     <label>Allowed ba ang OT?</label>
     <select id="ot-allowed">
         <option value="no">Hindi</option>
         <option value="yes">Oo</option>
     </select>
+    
     <div id="ot-hours-div" class="hidden">
-        <input type="number" id="ot-limit" placeholder="Ilang oras ang OT limit?">
+        <label>Ilang oras ang limit ng OT?</label>
+        <input type="number" id="ot-limit" placeholder="Ex: 1">
     </div>
+
     <button onclick="saveSetup()">Simulan na!</button>
 </div>
 
@@ -38,24 +63,26 @@
     <div class="progress-container">
         <div class="progress-bar" id="bar"></div>
     </div>
-    <p id="stats">Rendered: 0 / 500 hrs</p>
+    <p id="stats" style="font-weight: bold;">Rendered: 0 / 500 hrs</p>
+    <p id="remaining-text" class="info-text"></p>
     <hr>
     <h3>Daily Log</h3>
-    <p>Shift: 9:00 AM - 6:00 PM (8 hrs)</p>
+    <p id="sched-info" class="info-text"></p>
+    
     <div id="ot-prompt">
         <label>Mag-o-OT ka ba ngayon?</label>
         <select id="daily-ot">
             <option value="0">Walang OT</option>
         </select>
     </div>
+    
     <button onclick="logHours()">Log Today's Progress</button>
-    <button style="background: #ea4335;" onclick="resetData()">Reset Data</button>
+    <button style="background: #ea4335;" onclick="resetData()">Reset Everything</button>
 </div>
 
 <script>
     let data = JSON.parse(localStorage.getItem('ojtData'));
 
-    // Registration para sa Offline Mode
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('sw.js');
     }
@@ -66,13 +93,35 @@
         document.getElementById('ot-hours-div').classList.toggle('hidden', this.value === 'no');
     });
 
+    function calculateBaseHours(start, end, includeLunch) {
+        const startTime = new Date(`2024-01-01 ${start}`);
+        const endTime = new Date(`2024-01-01 ${end}`);
+        let diff = (endTime - startTime) / (1000 * 60 * 60); // convert ms to hours
+        
+        if (includeLunch === 'no') {
+            diff = diff - 1; // bawas 1 hour lunch
+        }
+        return diff > 0 ? diff : 0;
+    }
+
     function saveSetup() {
+        const start = document.getElementById('start-time').value;
+        const end = document.getElementById('end-time').value;
+        const includeLunch = document.getElementById('include-lunch').value;
+        
+        const baseHours = calculateBaseHours(start, end, includeLunch);
+
         const setup = {
             name: document.getElementById('name').value,
             goal: parseFloat(document.getElementById('goal').value),
+            rendered: parseFloat(document.getElementById('initial-hours').value || 0),
             otLimit: parseFloat(document.getElementById('ot-limit').value || 0),
-            rendered: 0
+            start: start,
+            end: end,
+            includeLunch: includeLunch,
+            baseHoursPerDay: baseHours
         };
+
         localStorage.setItem('ojtData', JSON.stringify(setup));
         data = setup;
         showTracker();
@@ -82,6 +131,7 @@
         document.getElementById('setup-card').classList.add('hidden');
         document.getElementById('tracker-card').classList.remove('hidden');
         document.getElementById('greet').innerText = `Kaya mo 'yan, ${data.name}! 👋`;
+        document.getElementById('sched-info').innerText = `Your shift: ${data.start} - ${data.end} (${data.baseHoursPerDay} hrs/day)`;
         
         const otDropdown = document.getElementById('daily-ot');
         otDropdown.innerHTML = '<option value="0">Walang OT</option>';
@@ -96,23 +146,27 @@
 
     function logHours() {
         const otToday = parseFloat(document.getElementById('daily-ot').value);
-        const standardHours = 8; 
-        const totalToday = standardHours + otToday;
+        const totalToday = data.baseHoursPerDay + otToday;
         
         data.rendered += totalToday;
         localStorage.setItem('ojtData', JSON.stringify(data));
         updateUI();
-        alert(`Nice! Nakapag-render ka ng ${totalToday} oras ngayong araw.`);
+        alert(`Logged: ${totalToday} hrs for today!`);
     }
 
     function updateUI() {
         const percent = (data.rendered / data.goal) * 100;
+        const remaining = data.goal - data.rendered;
+        
         document.getElementById('bar').style.width = Math.min(percent, 100) + '%';
-        document.getElementById('stats').innerText = `Rendered: ${data.rendered} / ${data.goal} hrs (${percent.toFixed(1)}%)`;
+        document.getElementById('stats').innerText = `Rendered: ${data.rendered.toFixed(1)} / ${data.goal} hrs (${percent.toFixed(1)}%)`;
+        document.getElementById('remaining-text').innerText = remaining > 0 
+            ? `${remaining.toFixed(1)} hours na lang, laya ka na!` 
+            : "Tapos mo na ang OJT! Congrats! 🎉";
     }
 
     function resetData() {
-        if(confirm("Bura lahat?")) {
+        if(confirm("Sigurado ka? Mabubura lahat ng progress mo.")) {
             localStorage.clear();
             location.reload();
         }
